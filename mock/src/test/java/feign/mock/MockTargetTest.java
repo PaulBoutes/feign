@@ -24,7 +24,7 @@ public class MockTargetTest {
 
   @Before
   public void setup() {
-    target = new MockTarget<>(MockTargetTest.class);
+    target = MockTarget.of(MockTargetTest.class);
   }
 
   @Test

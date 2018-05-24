@@ -21,8 +21,12 @@ public class MockTarget<E> implements Target<E> {
 
   private final Class<E> type;
 
-  public MockTarget(Class<E> type) {
+  private MockTarget(Class<E> type) {
     this.type = type;
+  }
+
+  public static <E> MockTarget<E> of(Class<E> type) {
+    return new MockTarget<>(type);
   }
 
   @Override

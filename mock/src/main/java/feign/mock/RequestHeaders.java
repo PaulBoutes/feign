@@ -13,6 +13,8 @@
  */
 package feign.mock;
 
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.joining;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -24,29 +26,25 @@ public class RequestHeaders {
 
   public static class Builder {
 
-    private Map<String, Collection<String>> headers = new HashMap<String, Collection<String>>();
+    private Map<String, Collection<String>> headers = new HashMap<>();
 
     private Builder() {}
 
     public Builder add(String key, Collection<String> values) {
-      if (!headers.containsKey(key)) {
-        headers.put(key, values);
-      } else {
-        Collection<String> previousValues = headers.get(key);
-        previousValues.addAll(values);
-        headers.put(key, previousValues);
-      }
+      headers.computeIfPresent(key, (k, list) -> {
+        list.addAll(values);
+        return list;
+      });
+      headers.putIfAbsent(key, values);
       return this;
     }
 
     public Builder add(String key, String value) {
-      if (!headers.containsKey(key)) {
-        headers.put(key, new ArrayList<String>(Arrays.asList(value)));
-      } else {
-        final Collection<String> values = headers.get(key);
-        values.add(value);
-        headers.put(key, values);
-      }
+      headers.computeIfPresent(key, (k, list) -> {
+        list.add(value);
+        return list;
+      });
+      headers.putIfAbsent(key, new ArrayList<>(Arrays.asList(value)));
       return this;
     }
 
@@ -81,10 +79,7 @@ public class RequestHeaders {
   }
 
   public int sizeOf(String key) {
-    if (!headers.containsKey(key)) {
-      return 0;
-    }
-    return headers.get(key).size();
+    return headers.getOrDefault(key, Collections.emptyList()).size();
   }
 
   public Collection<String> fetch(String key) {
@@ -108,14 +103,11 @@ public class RequestHeaders {
 
   @Override
   public String toString() {
-    StringBuilder builder = new StringBuilder();
-    for (Map.Entry<String, Collection<String>> entry : headers.entrySet()) {
-      builder.append(entry).append(',').append(' ');
-    }
-    if (builder.length() > 0) {
-      return builder.substring(0, builder.length() - 2);
-    }
-    return "no";
+    return headers
+        .entrySet()
+        .stream()
+        .map(Map.Entry::toString)
+        .collect(collectingAndThen(joining(", "), s -> s.length() > 0 ? s : "no"));
   }
 
 }

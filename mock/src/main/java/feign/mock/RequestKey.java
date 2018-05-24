@@ -180,9 +180,12 @@ public class RequestKey {
 
   @Override
   public String toString() {
-    return String.format("Request [%s %s: %s headers and %s]", method, url,
+    String payload =
+        Util.decodeOrDefault(body, charset == null ? Charset.defaultCharset() : charset, null);
+    return String.format("Request [%s %s: %s headers and %s with %s]", method, url,
         headers == null ? "without" : "with " + headers,
-        charset == null ? "no charset" : "charset " + charset);
+        charset == null ? "no charset" : "charset " + charset,
+        "payload: " + payload);
   }
 
 }

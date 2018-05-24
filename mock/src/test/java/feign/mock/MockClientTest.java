@@ -14,6 +14,7 @@
 package feign.mock;
 
 import static feign.Util.toByteArray;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -27,8 +28,10 @@ import java.lang.reflect.Type;
 import java.util.List;
 import javax.net.ssl.HttpsURLConnection;
 import org.hamcrest.Matchers;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import com.google.gson.Gson;
 import feign.Body;
 import feign.Feign;
 import feign.FeignException;
@@ -39,6 +42,8 @@ import feign.Response;
 import feign.codec.DecodeException;
 import feign.codec.Decoder;
 import feign.gson.GsonDecoder;
+import feign.mock.client.MockClient;
+import feign.mock.client.NonSequentialClient;
 
 public class MockClientTest {
 
@@ -61,6 +66,9 @@ public class MockClientTest {
                        @Param("repo") String repo,
                        @Param("login") String login,
                        @Param("type") String type);
+
+    @RequestLine("POST /create")
+    String create(String payload);
 
   }
 
@@ -97,7 +105,7 @@ public class MockClientTest {
   public void setup() throws IOException {
     try (InputStream input = getClass().getResourceAsStream("/fixtures/contributors.json")) {
       byte[] data = toByteArray(input);
-      mockClient = new MockClient();
+      mockClient = NonSequentialClient.create();
       github = Feign.builder().decoder(new AssertionDecoder(new GsonDecoder()))
           .client(mockClient.ok(HttpMethod.GET, "/repos/netflix/feign/contributors", data)
               .ok(HttpMethod.GET, "/repos/netflix/feign/contributors?client_id=55")
@@ -114,7 +122,7 @@ public class MockClientTest {
                   HttpsURLConnection.HTTP_INTERNAL_ERROR, "")
               .add(HttpMethod.GET, "/repos/netflix/feign/contributors?client_id=123456789",
                   HttpsURLConnection.HTTP_INTERNAL_ERROR, data))
-          .target(new MockTarget<>(GitHub.class));
+          .target(MockTarget.of(GitHub.class));
     }
   }
 
@@ -122,7 +130,6 @@ public class MockClientTest {
   public void hitMock() {
     List<Contributor> contributors = github.contributors("netflix", "feign");
     assertThat(contributors, hasSize(30));
-    mockClient.verifyStatus();
   }
 
   @Test
@@ -149,7 +156,6 @@ public class MockClientTest {
   public void paramsEncoding() {
     List<Contributor> contributors = github.contributors("7 7", "netflix", "feign");
     assertThat(contributors, hasSize(30));
-    mockClient.verifyStatus();
   }
 
   @Test
@@ -172,7 +178,6 @@ public class MockClientTest {
     assertThat(message, containsString("velo_at_github"));
     assertThat(message, containsString("preposterous hacker"));
 
-    mockClient.verifyStatus();
   }
 
   @Test
@@ -244,8 +249,6 @@ public class MockClientTest {
     github.create("netflix", "feign", "velo_at_github", "preposterous hacker");
     results = mockClient.verifyTimes(HttpMethod.POST, "/repos/netflix/feign/contributors", 3);
     assertThat(results, hasSize(3));
-
-    mockClient.verifyStatus();
   }
 
   @Test
@@ -260,5 +263,46 @@ public class MockClientTest {
 
     mockClient.verifyNever(HttpMethod.POST, "/repos/netflix/feign/contributors");
   }
+
+  @Test
+  public void shouldValidateBodyRequest() {
+    final Contributor payload = new Contributor();
+    payload.contributions = 25;
+    payload.login = "toto";
+    final String json = new Gson().toJson(payload);
+
+    RequestKey requestKey = RequestKey
+        .builder(HttpMethod.POST, "/create")
+        .body(json)
+        .build();
+
+    mockClient.ok(requestKey, "ok");
+
+    Assert.assertThat(github.create(json), is("ok"));
+  }
+
+  @Test
+  public void shouldRaiseAnErrorWithMismatchedPayload() throws Exception {
+    final Contributor payload = new Contributor();
+    payload.contributions = 25;
+    payload.login = "toto";
+    final String json = new Gson().toJson(payload);
+
+    RequestKey requestKey = RequestKey
+        .builder(HttpMethod.POST, "/create")
+        .body("{}")
+        .build();
+
+    mockClient.ok(requestKey, "ok");
+
+    try {
+      github.create(json);
+      fail();
+    } catch (FeignException e) {
+      assertThat(e.status(), is(404));
+    }
+
+  }
+
 
 }

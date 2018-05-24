@@ -14,6 +14,8 @@
 package feign.mock;
 
 import static feign.Util.toByteArray;
+import static org.hamcrest.CoreMatchers.both;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -26,6 +28,12 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.List;
 import javax.net.ssl.HttpsURLConnection;
+
+import com.google.gson.Gson;
+import feign.mock.client.MockClient;
+import feign.mock.client.SequentialClient;
+import org.hamcrest.CoreMatchers;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import feign.Body;
@@ -61,6 +69,9 @@ public class MockClientSequentialTest {
                        @Param("repo") String repo,
                        @Param("login") String login,
                        @Param("type") String type);
+
+    @RequestLine("POST /create")
+    String create(String payload);
 
   }
 
@@ -101,7 +112,7 @@ public class MockClientSequentialTest {
           .builder()
           .add("Name", "netflix")
           .build();
-      mockClientSequential = new MockClient(true);
+      mockClientSequential = SequentialClient.create();
       githubSequential = Feign.builder().decoder(new AssertionDecoder(new GsonDecoder()))
           .client(mockClientSequential
               .add(RequestKey
@@ -114,7 +125,7 @@ public class MockClientSequentialTest {
               .add(HttpMethod.GET, "/repos/netflix/feign/contributors",
                   Response.builder().status(HttpsURLConnection.HTTP_OK)
                       .headers(RequestHeaders.EMPTY).body(data)))
-          .target(new MockTarget<>(GitHub.class));
+          .target(MockTarget.of(GitHub.class));
     }
   }
 
@@ -169,6 +180,51 @@ public class MockClientSequentialTest {
     } catch (VerificationAssertionError e) {
       assertThat(e.getMessage(), startsWith("Expected Request ["));
     }
+  }
+
+  @Test
+  public void shouldRaiseAnErrorWithMismatchedPayload() throws Exception {
+    final Contributor payload = new Contributor();
+    payload.contributions = 25;
+    payload.login = "toto";
+    final String json = new Gson().toJson(payload);
+
+    RequestKey requestKey = RequestKey
+        .builder(HttpMethod.POST, "/create")
+        .body("{}")
+        .build();
+
+    mockClientSequential.resetRequests();
+    mockClientSequential.ok(requestKey, "ok");
+    try {
+      githubSequential.create(json);
+      fail();
+    } catch (VerificationAssertionError e) {
+      Assert.assertThat(e.getMessage(), both(
+          CoreMatchers.containsString("with payload: {}"))
+          .and(CoreMatchers.containsString("with payload: {\"login\":\"toto\",\"contributions\":25}")));
+    }
+
+    mockClientSequential.verifyStatus();
+  }
+
+  @Test
+  public void shouldValidateBodyRequest() {
+    final Contributor payload = new Contributor();
+    payload.contributions = 25;
+    payload.login = "toto";
+    final String json = new Gson().toJson(payload);
+
+    RequestKey requestKey = RequestKey
+        .builder(HttpMethod.POST, "/create")
+        .body(json)
+        .build();
+
+    mockClientSequential.resetRequests();
+    mockClientSequential.ok(requestKey, "ok");
+
+    Assert.assertThat(githubSequential.create(json), is("ok"));
+
   }
 
 }

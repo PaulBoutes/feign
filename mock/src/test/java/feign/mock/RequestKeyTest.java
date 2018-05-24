@@ -148,7 +148,7 @@ public class RequestKeyTest {
   public void testToString() throws Exception {
     assertThat(requestKey.toString(), startsWith("Request [GET a: "));
     assertThat(requestKey.toString(),
-        both(containsString(" with my-header=[val] ")).and(containsString(" UTF-16]")));
+        both(containsString(" with my-header=[val] ")).and(containsString(" UTF-16")));
   }
 
   @Test
